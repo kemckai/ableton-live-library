@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chord and MIDI library</title>
+  <style>
+    :root {
+      --bg: #14120f;
+      --bg-raised: #1d1a16;
+      --line: rgba(243, 236, 223, 0.12);
+      --text: #f4efe6;
+      --muted: #a89f91;
+      --gold: #e0a84a;
+      --gold-dim: rgba(224, 168, 74, 0.16);
+      --minor: #17343a;
+      --minor-text: #d7f1f4;
+      --major: #2c271f;
+      --dim: #3a2430;
+      --dim-text: #f6d5e1;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.45 "Avenir Next", "Segoe UI", sans-serif;
+    }
+    button, input, select { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    header {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      padding: 16px 22px 8px;
+      flex-wrap: wrap;
+    }
+    .brand { font-size: 18px; }
+    .brand span { color: var(--muted); font-weight: 500; }
+    .tabs { display: flex; gap: 6px; background: #100e0c; padding: 4px; border-radius: 999px; }
+    .tabs button, .modes button, .more, .ghost {
+      border: 0;
+      background: transparent;
+      border-radius: 999px;
+    }
+    .tabs button { padding: 7px 14px; color: var(--muted); }
+    .tabs button[aria-pressed="true"] { background: var(--gold); color: #23180a; }
+    .stats { margin-left: auto; color: var(--muted); font-size: 13px; }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      padding: 8px 22px 14px;
+    }
+    #q, select {
+      background: var(--bg-raised);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+    #q { flex: 1 1 220px; min-width: 0; outline: none; }
+    #q:focus, select:focus { border-color: var(--gold); outline: none; }
+    .modes { display: flex; gap: 4px; }
+    .modes button { padding: 8px 12px; color: var(--muted); border: 1px solid transparent; }
+    .modes button[aria-pressed="true"] {
+      color: var(--text);
+      background: var(--gold-dim);
+      border-color: rgba(224, 168, 74, 0.4);
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(300px, 440px);
+      gap: 16px;
+      padding: 0 22px 22px;
+      height: calc(100vh - 128px);
+    }
+    .list, .detail {
+      min-height: 0;
+      overflow: auto;
+      background: var(--bg-raised);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+    }
+    .row {
+      width: 100%;
+      text-align: left;
+      border: 0;
+      border-bottom: 1px solid var(--line);
+      background: transparent;
+      padding: 12px 14px;
+      display: grid;
+      gap: 3px;
+    }
+    .row:hover { background: rgba(255, 255, 255, 0.03); }
+    .row[aria-current="true"] {
+      background: var(--gold-dim);
+      box-shadow: inset 3px 0 0 var(--gold);
+    }
+    .row-top { display: flex; justify-content: space-between; gap: 12px; }
+    .meta, .status, .path { color: var(--muted); font-size: 12px; }
+    .preview {
+      color: #ddd4c6;
+      font-family: ui-monospace, monospace;
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .badge {
+      color: var(--gold);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .detail { padding: 16px 16px 24px; }
+    .detail h2 { margin: 8px 0 4px; font-size: 22px; font-weight: 600; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 16px; }
+    .ghost, .more {
+      border: 1px solid var(--line);
+      background: #14120f;
+      padding: 8px 12px;
+      border-radius: 999px;
+      color: inherit;
+    }
+    a.ghost { text-decoration: none; display: inline-block; }
+    .section { margin: 0 0 16px; }
+    .section h3 {
+      margin: 0 0 8px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip {
+      font-family: ui-monospace, monospace;
+      font-size: 13px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: var(--major);
+    }
+    .chip.minor { background: var(--minor); color: var(--minor-text); }
+    .chip.dim { background: var(--dim); color: var(--dim-text); }
+    .more-wrap, .empty { padding: 16px; }
+    .empty { color: var(--muted); }
+    @media (max-width: 800px) {
+      .stats { margin-left: 0; }
+      .layout { grid-template-columns: 1fr; height: auto; }
+      .list { max-height: 48vh; }
+      .detail { min-height: 40vh; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">Library <span>choose a progression or a song</span></div>
+    <div class="tabs" role="tablist">
+      <button type="button" id="tab-progressions" role="tab" aria-pressed="true">Progressions</button>
+      <button type="button" id="tab-midi" role="tab" aria-pressed="false">MIDI</button>
+    </div>
+    <div class="stats" id="stats"></div>
+  </header>
+  <div class="controls">
+    <input id="q" type="search" placeholder="Search chords, or type minor" autocomplete="off">
+    <select id="genre" aria-label="Genre"></select>
+    <select id="decade" aria-label="Decade"></select>
+    <div class="modes" id="modes">
+      <button type="button" data-mode="" aria-pressed="true">Any</button>
+      <button type="button" data-mode="major" aria-pressed="false">Major</button>
+      <button type="button" data-mode="minor" aria-pressed="false">Minor</button>
+    </div>
+  </div>
+  <div class="layout">
+    <div class="list" id="list"><p class="empty">Choose a genre to load progressions.</p></div>
+    <aside class="detail" id="detail"><p class="status">Pick a progression or a MIDI file.</p></aside>
+  </div>
+  <script>
+    const PAGE = 40;
+    const REPO = "https://github.com/kemckai/ableton-live-mcp/blob/main/midi/";
+    const state = {
+      source: "progressions",
+      mode: "",
+      offset: 0,
+      genre: "",
+      rows: [],
+      midi: null,
+      chords: {},
+      req: 0,
+    };
+    const q = document.getElementById("q");
+    const genre = document.getElementById("genre");
+    const decade = document.getElementById("decade");
+    const list = document.getElementById("list");
+    const detail = document.getElementById("detail");
+
+    function esc(value) {
+      return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+      }[ch]));
+    }
+    function formatChunk(token) {
+      let text = token;
+      if (text.length >= 2 && text[1] === "s" && !text.slice(1).startsWith("sus")) {
+        text = text[0] + "#" + text.slice(2);
+      }
+      return text.replace("min", "m");
+    }
+    function formatChord(token) {
+      return token.split("/").map(formatChunk).join("/");
+    }
+    function chordKind(label) {
+      const low = label.toLowerCase();
+      if (low.includes("dim")) return "dim";
+      if (low.includes("aug")) return "aug";
+      if (low.includes("maj")) return "major";
+      if (low.replace("maj", "").includes("m")) return "minor";
+      return "major";
+    }
+    function formatPreview(preview) {
+      return (preview || "").split(/\s+/).filter(Boolean).map(formatChord).join("  ");
+    }
+    function sectionsOf(chords) {
+      const parts = String(chords || "").split(/<([^>]+)>/).map((part) => part.trim()).filter((part) => part !== "");
+      const sections = [];
+      if (!parts.length) return sections;
+      let index = 0;
+      if (!String(chords).trim().startsWith("<")) {
+        sections.push({ name: "Progression", chords: parts[0] });
+        index = 1;
+      }
+      for (; index < parts.length; index += 2) {
+        sections.push({ name: (parts[index] || "Section").replace(/_/g, " "), chords: parts[index + 1] || "" });
+      }
+      return sections;
+    }
+    function chips(chords) {
+      return (chords || "").split(/\s+/).filter(Boolean).map((token) => {
+        const label = formatChord(token);
+        return `<span class="chip ${chordKind(label)}">${esc(label)}</span>`;
+      }).join("");
+    }
+    function queryParts(text) {
+      let mode = "";
+      const words = [];
+      for (const word of text.toLowerCase().split(/\s+/).filter(Boolean)) {
+        if (word === "minor" || word === "min") mode = "minor";
+        else if (word === "major" || word === "maj") mode = "major";
+        else words.push(word);
+      }
+      return { mode, words };
+    }
+
+    function filtered() {
+      const parsed = queryParts(q.value.trim());
+      const mode = state.mode || parsed.mode;
+      const words = parsed.words;
+      if (state.source === "midi") {
+        return (state.midi || []).filter((item) => {
+          if (!words.length) return true;
+          const hay = `${item[1]} ${item[2]} ${item[4]}`.toLowerCase();
+          return words.every((word) => hay.includes(word));
+        });
+      }
+      return state.rows.filter((item) => {
+        if (decade.value && item[1] !== decade.value) return false;
+        if (mode && item[2] !== mode) return false;
+        if (!words.length) return true;
+        const hay = `${item[3]} ${formatPreview(item[3])}`.toLowerCase();
+        return words.every((word) => hay.includes(word));
+      });
+    }
+
+    function render(reset) {
+      if (reset) state.offset = 0;
+      if (state.source === "progressions" && !state.genre) {
+        list.innerHTML = `<p class="empty">Choose a genre to load progressions.</p>`;
+        return;
+      }
+      const rows = filtered();
+      const slice = rows.slice(state.offset, state.offset + PAGE);
+      const html = slice.map((item) => {
+        if (state.source === "midi") {
+          const variant = item[3] ? `<span class="badge">variant ${esc(item[3])}</span>` : "";
+          return `<button class="row" data-id="${item[0]}">
+            <span class="row-top"><span>${esc(item[2])}</span>${variant}</span>
+            <span class="meta">${esc(item[1])}</span>
+          </button>`;
+        }
+        const bits = [state.genre, item[1], item[2]].filter((bit) => bit && bit !== "Untagged").join(" · ");
+        return `<button class="row" data-id="${item[0]}">
+          <span class="row-top"><span>${esc(state.genre === "Untagged" ? "Progression" : state.genre)} #${item[0]}</span><span class="badge">${esc(item[2])}</span></span>
+          <span class="meta">${esc(bits)}</span>
+          <span class="preview">${esc(formatPreview(item[3]))}</span>
+        </button>`;
+      }).join("");
+      const more = state.offset + PAGE < rows.length
+        ? `<div class="more-wrap"><button class="more" type="button">Show more</button></div>` : "";
+      const body = html || `<p class="empty">Nothing matches. Try a chord like Am, a decade, or a song name.</p>`;
+      if (reset) list.innerHTML = body + more;
+      else {
+        list.querySelector(".more-wrap")?.remove();
+        list.insertAdjacentHTML("beforeend", body + more);
+      }
+    }
+
+    async function loadGenre(name) {
+      const id = ++state.req;
+      state.genre = name;
+      state.rows = [];
+      state.offset = 0;
+      if (!name) {
+        render(true);
+        return;
+      }
+      list.innerHTML = `<p class="empty">Loading ${esc(name)}…</p>`;
+      const info = state.facets.genres.find((item) => item.name === name);
+      const parts = await Promise.all(info.files.map((file) =>
+        fetch(`data/progressions/${file}`).then((res) => {
+          if (!res.ok) throw new Error(`Could not load ${file}`);
+          return res.json();
+        })
+      ));
+      if (id !== state.req) return;
+      state.rows = parts.flat();
+      render(true);
+    }
+
+    async function loadMidi() {
+      if (state.midi) return;
+      list.innerHTML = `<p class="empty">Loading MIDI songs…</p>`;
+      const data = await fetch("data/midi.json").then((res) => res.json());
+      state.midi = data;
+    }
+
+    async function choose(id) {
+      for (const row of list.querySelectorAll(".row")) {
+        if (Number(row.dataset.id) === id) row.setAttribute("aria-current", "true");
+        else row.removeAttribute("aria-current");
+      }
+      if (state.source === "midi") {
+        const item = state.midi.find((row) => row[0] === id);
+        const variant = item[3] ? ` · variant ${esc(item[3])}` : "";
+        const href = REPO + item[4].split("/").map(encodeURIComponent).join("/");
+        detail.innerHTML = `
+          <p class="badge">MIDI</p>
+          <h2>${esc(item[2])}</h2>
+          <p class="meta">${esc(item[1])}${variant}</p>
+          <p class="path">${esc(item[4])}</p>
+          <div class="actions">
+            <button class="ghost" type="button" id="copy">Copy path</button>
+            <a class="ghost" href="${esc(href)}">Open in the repo</a>
+          </div>`;
+        document.getElementById("copy").onclick = () => navigator.clipboard.writeText(item[4]);
+        return;
+      }
+      const row = state.rows.find((item) => item[0] === id);
+      detail.innerHTML = `<p class="status">Loading chords…</p>`;
+      const bucket = Math.floor(id / state.facets.bucket);
+      if (!state.chords[bucket]) {
+        state.chords[bucket] = fetch(`data/chords/${bucket}.json`).then((res) => res.json());
+      }
+      const table = await state.chords[bucket];
+      const chords = table[String(id)] || "";
+      const sections = sectionsOf(chords).map((section) => `
+        <section class="section">
+          <h3>${esc(section.name)}</h3>
+          <div class="chips">${chips(section.chords)}</div>
+        </section>`).join("");
+      const bits = [state.genre, row && row[1], row && row[2]].filter((bit) => bit && bit !== "Untagged");
+      detail.innerHTML = `
+        <p class="badge">Progression #${id}</p>
+        <h2>${esc(state.genre === "Untagged" ? "Progression " + id : state.genre)}</h2>
+        <p class="meta">${esc(bits.join(" · "))}</p>
+        <div class="actions"><button class="ghost" type="button" id="copy">Copy chords</button></div>
+        ${sections}`;
+      document.getElementById("copy").onclick = () => navigator.clipboard.writeText(chords);
+    }
+
+    function setSource(source) {
+      state.source = source;
+      state.offset = 0;
+      document.getElementById("tab-progressions").setAttribute("aria-pressed", String(source === "progressions"));
+      document.getElementById("tab-midi").setAttribute("aria-pressed", String(source === "midi"));
+      const progressions = source === "progressions";
+      genre.hidden = decade.hidden = document.getElementById("modes").hidden = !progressions;
+      q.placeholder = progressions ? "Search chords, or type minor" : "Search artist or song";
+      detail.innerHTML = `<p class="status">Pick a ${progressions ? "progression" : "MIDI file"}.</p>`;
+      if (progressions) render(true);
+      else loadMidi().then(() => render(true)).catch((error) => {
+        list.innerHTML = `<p class="empty">${esc(error.message)}</p>`;
+      });
+    }
+
+    document.getElementById("tab-progressions").onclick = () => setSource("progressions");
+    document.getElementById("tab-midi").onclick = () => setSource("midi");
+    let timer = 0;
+    q.addEventListener("input", () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => render(true), 160);
+    });
+    genre.onchange = () => loadGenre(genre.value).catch((error) => {
+      list.innerHTML = `<p class="empty">${esc(error.message)}</p>`;
+    });
+    decade.onchange = () => render(true);
+    document.getElementById("modes").onclick = (event) => {
+      const button = event.target.closest("button");
+      if (!button) return;
+      state.mode = button.dataset.mode;
+      for (const item of document.querySelectorAll("#modes button")) {
+        item.setAttribute("aria-pressed", String(item === button));
+      }
+      render(true);
+    };
+    list.onclick = (event) => {
+      if (event.target.closest(".more")) {
+        state.offset += PAGE;
+        render(false);
+        return;
+      }
+      const row = event.target.closest(".row");
+      if (row) choose(Number(row.dataset.id));
+    };
+
+    fetch("data/facets.json").then((res) => res.json()).then((facets) => {
+      state.facets = facets;
+      document.getElementById("stats").textContent =
+        `${facets.progressions.toLocaleString()} progressions · ${facets.midi.toLocaleString()} MIDI files`;
+      genre.innerHTML = `<option value="">Choose a genre</option>` + facets.genres.map((item) =>
+        `<option value="${esc(item.name)}">${esc(item.name)} (${item.count.toLocaleString()})</option>`
+      ).join("");
+      decade.innerHTML = `<option value="">All decades</option>` + facets.decades.map((item) =>
+        `<option value="${esc(item)}">${esc(item)}</option>`
+      ).join("");
+    }).catch((error) => {
+      list.innerHTML = `<p class="empty">Could not load the library. ${esc(error.message)}</p>`;
+    });
+  </script>
+</body>
+</html>
